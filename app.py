@@ -198,6 +198,110 @@ def segment_lungs(volume, prog_cb=None):
 
 
 # ══════════════════════════════════════════════════════════════
+#  SEGMENTATION CORPS ENTIER
+# ══════════════════════════════════════════════════════════════
+
+def segment_body(volume):
+    """
+    Segmente la silhouette complète du corps humain.
+    Principe : tout ce qui n'est pas de l'air ambiant extérieur au patient.
+    L'air extérieur = régions < -300 HU connectées au bord de l'image.
+    """
+    nz, ny, nx = volume.shape
+    air = (volume < -300).astype(np.uint8)
+    body = np.zeros((nz, ny, nx), dtype=np.uint8)
+
+    for i in range(nz):
+        sl = air[i]
+        lbl2, n2 = label(sl)
+        if n2 == 0:
+            # Pas d'air du tout : toute la coupe = corps
+            body[i] = 1
+            continue
+        # Régions d'air connectées au bord de l'image = air extérieur
+        border_ids = set(lbl2[0, :]) | set(lbl2[-1, :]) | set(lbl2[:, 0]) | set(lbl2[:, -1])
+        border_ids.discard(0)
+        external_air = np.isin(lbl2, list(border_ids))
+        # Corps = tout ce qui n'est PAS de l'air extérieur
+        body[i] = (~external_air).astype(np.uint8)
+        body[i] = binary_fill_holes(body[i]).astype(np.uint8)
+
+    # Fermeture morphologique pour lisser et boucher les trous
+    body = binary_closing(body, structure=np.ones((5, 9, 9))).astype(np.uint8)
+
+    # Garder uniquement le plus grand composant connexe (= le corps)
+    lbl3, _ = label(body)
+    if lbl3.max() == 0:
+        return body
+    sizes = np.bincount(lbl3.ravel()); sizes[0] = 0
+    body = (lbl3 == sizes.argmax()).astype(np.uint8)
+
+    print(f"[BODY] Corps : {body.sum():,} vox")
+    return body
+
+
+# ══════════════════════════════════════════════════════════════
+#  SEGMENTATION OS
+# ══════════════════════════════════════════════════════════════
+def segment_bones(volume, body_mask=None):
+    """
+    Segmentation os améliorée — élimine les artefacts, la table scanner,
+    la peau et les fragments non-osseux.
+    """
+    from scipy.ndimage import binary_opening, binary_closing, binary_dilation, label
+
+    nz, ny, nx = volume.shape
+
+    # ── 1. Seuil HU strict (vrai os cortical > 350, évite la peau/graisse)
+    bone_raw = (volume > 350).astype(np.uint8)
+
+    # ── 2. Restriction au corps (élimine la table du scanner et l'air)
+    if body_mask is not None:
+        # On érode légèrement le masque corps pour exclure la peau surface
+        body_eroded = binary_erosion(body_mask, iterations=4).astype(np.uint8)
+        bone_raw = (bone_raw & body_eroded).astype(np.uint8)
+
+    # ── 3. Ouverture morphologique agressive (supprime les artefacts fins)
+    #    structure 3x3x3 iterations=2 = élimine tout < ~3mm
+    bone_raw = binary_opening(
+        bone_raw, structure=np.ones((3, 3, 3)), iterations=2
+    ).astype(np.uint8)
+
+    # ── 4. Éliminer la table du scanner
+    #    La table est typiquement dans les 15% inférieurs du volume en Y
+    #    et forme une ligne horizontale très plate
+    table_zone = int(nz * 0.88)  # 88% vers le bas = zone table
+    bone_raw[table_zone:, :, :] = 0  # coupes du bas = table scanner
+
+    # ── 5. Éliminer les composants trop petits ET trop grands
+    #    Trop petit = artefact | Trop grand = probablement pas un os
+    lbl, n = label(bone_raw)
+    if n == 0:
+        return bone_raw
+    sizes = np.bincount(lbl.ravel()); sizes[0] = 0
+    total_vox = bone_raw.size
+
+    # Seuils : garde entre 800 vox (os réel min) et 8% du volume total
+    keep = np.where(
+        (sizes >= 800) & (sizes <= total_vox * 0.08)
+    )[0]
+    bone_clean = np.isin(lbl, keep).astype(np.uint8)
+
+    # ── 6. Fermeture pour reconnecter les fragments osseux proches (côtes)
+    bone_clean = binary_closing(
+        bone_clean, structure=np.ones((3, 5, 5))
+    ).astype(np.uint8)
+
+    # ── 7. Deuxième passe : supprimer les composants encore isolés < 1500 vox
+    lbl2, n2 = label(bone_clean)
+    if n2 > 0:
+        sizes2 = np.bincount(lbl2.ravel()); sizes2[0] = 0
+        keep2 = np.where(sizes2 >= 1500)[0]
+        bone_clean = np.isin(lbl2, keep2).astype(np.uint8)
+
+    print(f"[BONE] Os : {bone_clean.sum():,} vox | {len(keep2) if n2 > 0 else 0} composants")
+    return bone_clean
+# ══════════════════════════════════════════════════════════════
 #  MAILLAGE PyVista → JSON Three.js
 # ══════════════════════════════════════════════════════════════
 
@@ -250,7 +354,7 @@ def mask_to_mesh_json(binary_mask, spacing, sigma=2.0, step=2,
 
     print(f"[MESH] Final : {len(pts):,} pts | {len(raw_faces):,} faces")
     return {
-        "positions": pts,           # np.array — centrage global fait dans le pipeline
+        "positions": pts,
         "normals":   nrms,
         "indices":   raw_faces.astype(np.int32),
     }
@@ -298,37 +402,55 @@ def process_patient(folder):
                 if seg_files else np.zeros(volume.shape, dtype=np.uint8)
         stats = tumor_stats_dict(volume, mask, spacing)
 
-        prog(40, "Segmentation pulmonaire…")
+        prog(38, "Segmentation corps entier…")
+        body_mask = segment_body(volume)
+
+        prog(45, "Segmentation pulmonaire…")
         def seg_cb(i, total):
-            _progress["pct"] = 40 + int(18 * i / total)
+            _progress["pct"] = 45 + int(15 * i / total)
             _progress["msg"] = f"Segmentation coupe {i}/{total}…"
         lung_mask, vessels_mask = segment_lungs(volume, prog_cb=seg_cb)
 
-        prog(60, "Maillage poumons (PyVista)…")
-        lung_raw     = mask_to_mesh_json(lung_mask, spacing,
-                                         sigma=2.5, step=2, smooth_iter=60,
-                                         target_faces=60_000)
-        prog(74, "Maillage vaisseaux (PyVista)…")
+        prog(58, "Segmentation os…")
+        bone_mask = segment_bones(volume, body_mask)
+
+        prog(62, "Maillage corps entier (PyVista)…")
+        body_raw = mask_to_mesh_json(body_mask, spacing,
+                                     sigma=3.5, step=3, smooth_iter=100,
+                                     target_faces=80_000)
+
+        prog(72, "Maillage poumons (PyVista)…")
+        lung_raw = mask_to_mesh_json(lung_mask, spacing,
+                                     sigma=2.5, step=2, smooth_iter=60,
+                                     target_faces=60_000)
+
+        prog(80, "Maillage vaisseaux (PyVista)…")
         lbl_v2, nv2 = label(vessels_mask)
         if nv2 > 0:
             sv2 = np.bincount(lbl_v2.ravel()); sv2[0] = 0
             top_v = [i for i in np.argsort(sv2)[-min(80,nv2):] if sv2[i] >= 200]
             vessels_mask = np.isin(lbl_v2, top_v).astype(np.uint8)
-        vessels_raw  = mask_to_mesh_json(vessels_mask, spacing,
-                                         sigma=1.0, step=1, smooth_iter=25,
-                                         target_faces=40_000, keep_largest=False)
-        prog(86, "Maillage nodule (PyVista)…")
+        vessels_raw = mask_to_mesh_json(vessels_mask, spacing,
+                                        sigma=1.0, step=1, smooth_iter=25,
+                                        target_faces=40_000, keep_largest=False)
+
+        prog(88, "Maillage os (PyVista)…")
+        bone_raw = mask_to_mesh_json(bone_mask, spacing,
+                                     sigma=1.2, step=2, smooth_iter=40,
+                                     target_faces=100_000, keep_largest=False)
+
+        prog(93, "Maillage nodule (PyVista)…")
         nodule_raw = None
         if mask.any():
             nodule_raw = mask_to_mesh_json(mask, spacing,
                                            sigma=1.0, step=1, smooth_iter=40,
                                            target_faces=12_000)
 
-        # Centrage global : un seul origine = centre du poumon
-        # Tous les maillages sont soustrait du même vecteur → positions relatives correctes
-        if lung_raw is not None:
-            pts_l = lung_raw["positions"]
-            global_center = (pts_l.max(axis=0) + pts_l.min(axis=0)) / 2.0
+        # Centrage global sur le corps entier (ou poumon si pas de corps)
+        ref_raw = body_raw if body_raw is not None else lung_raw
+        if ref_raw is not None:
+            pts_ref = ref_raw["positions"]
+            global_center = (pts_ref.max(axis=0) + pts_ref.min(axis=0)) / 2.0
         else:
             global_center = np.zeros(3, dtype=np.float32)
 
@@ -346,13 +468,18 @@ def process_patient(folder):
                 "center":    global_center.tolist(),
             }
 
+        body_json    = finalize(body_raw)
         lung_json    = finalize(lung_raw)
         vessels_json = finalize(vessels_raw)
+        bone_json    = finalize(bone_raw)
         nodule_json  = finalize(nodule_raw)
+
         prog(96, "Serialisation…")
         _cache = {
+            "body_mesh":    body_json,
             "lung_mesh":    lung_json,
             "vessels_mesh": vessels_json,
+            "bone_mesh":    bone_json,
             "nodule_mesh":  nodule_json,
             "stats":        stats,
             "n_ct":         len(ct_files),
@@ -393,8 +520,10 @@ def api_meshes():
     if not _cache:
         return jsonify({"error": "Aucun volume charge"}), 404
     return jsonify({
+        "body_mesh":    _cache["body_mesh"],
         "lung_mesh":    _cache["lung_mesh"],
         "vessels_mesh": _cache["vessels_mesh"],
+        "bone_mesh":    _cache["bone_mesh"],
         "nodule_mesh":  _cache["nodule_mesh"],
         "stats":        _cache["stats"],
         "n_ct":         _cache["n_ct"],
@@ -445,7 +574,6 @@ def api_slice():
     rgb = np.flipud(rgb)
 
     img = Image.fromarray(rgb, "RGB")
-    # Redimensionner a 512px max
     w, h = img.size
     scale = min(512 / max(w, 1), 512 / max(h, 1))
     img = img.resize((max(1, int(w * scale)), max(1, int(h * scale))), Image.NEAREST)

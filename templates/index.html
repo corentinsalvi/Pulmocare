@@ -10,7 +10,7 @@
   --bg:#03040d;--bg2:#060814;
   --border:rgba(80,140,255,0.10);--border2:rgba(80,140,255,0.22);
   --blue:#4da8f5;--text:#b8cce8;--muted:#2e3d60;--dim:#6a7fa8;
-  --nod:#ff6b35;--green:#30c87a;
+  --nod:#ff6b35;--green:#30c87a;--pink:#ff69b4;--ivory:#f5f0e8;
   --divider:rgba(80,140,255,0.12);
 }
 body{background:var(--bg);color:var(--text);font-family:'DM Mono',monospace;height:100vh;overflow:hidden;}
@@ -152,6 +152,9 @@ body{background:var(--bg);color:var(--text);font-family:'DM Mono',monospace;heig
 .tog.on{ background:rgba(77,168,245,.12); border-color:rgba(77,168,245,.28); color:var(--blue); }
 .tog.on.t-nod{ background:rgba(255,107,53,.10); border-color:rgba(255,107,53,.22); color:var(--nod); }
 .tog.on.t-ves{ background:rgba(48,200,122,.08); border-color:rgba(48,200,122,.18); color:var(--green); }
+.tog.on.t-body{ background:rgba(77,168,245,.10); border-color:rgba(77,168,245,.25); color:var(--blue); }
+.tog.on.t-lung{ background:rgba(255,105,180,.10); border-color:rgba(255,105,180,.25); color:var(--pink); }
+.tog.on.t-bone{ background:rgba(245,240,232,.08); border-color:rgba(245,240,232,.20); color:var(--ivory); }
 
 .srow{ margin-bottom:8px; }
 .srow label{ font-size:9.5px; color:var(--dim); display:flex; justify-content:space-between; margin-bottom:3px; }
@@ -225,26 +228,59 @@ input[type=color]{ width:100%; height:22px; cursor:pointer; border-radius:4px; b
       </div>
 
       <div class="label">Affichage 3D</div>
+
+      <!-- Ligne 1 : Corps + Poumons -->
       <div class="trow">
-        <div class="tog on"       id="t-lung" onclick="tog('lung')">🫁 Poumons</div>
-        <div class="tog on t-ves" id="t-ves"  onclick="tog('vessels')">🩸 Vaisseaux</div>
+        <div class="tog on t-body" id="t-body" onclick="tog('body')">🧍 Corps</div>
+        <div class="tog on t-lung" id="t-lung" onclick="tog('lung')">🩷 Poumons</div>
       </div>
+      <!-- Ligne 2 : Os + Vaisseaux -->
       <div class="trow">
-        <div class="tog on t-nod" id="t-nod" onclick="tog('nodule')">● Nodule</div>
-        <div class="tog"          id="t-rot" onclick="togRot()">⟳ Rotation</div>
+        <div class="tog on t-bone" id="t-bone" onclick="tog('bone')">🦴 Os</div>
+        <div class="tog on t-ves"  id="t-ves"  onclick="tog('vessels')">🩸 Vaisseaux</div>
       </div>
+      <!-- Ligne 3 : Nodule + Rotation -->
+      <div class="trow">
+        <div class="tog on t-nod" id="t-nod"  onclick="tog('nodule')">● Nodule</div>
+        <div class="tog"          id="t-rot"  onclick="togRot()">⟳ Rotation</div>
+      </div>
+
+      <!-- Opacité Corps -->
       <div class="srow">
-        <label><span>Opacité poumon</span><span id="lop">22%</span></label>
+        <label><span>Opacité corps</span><span id="lbop">12%</span></label>
+        <input type="range" min="2" max="60" value="12" oninput="lbop.textContent=this.value+'%';setBodyOpacity(this.value/100)">
+      </div>
+      <!-- Opacité Poumons -->
+      <div class="srow">
+        <label><span>Opacité poumons</span><span id="lop">22%</span></label>
         <input type="range" min="2" max="80" value="22" oninput="lop.textContent=this.value+'%';setLungOpacity(this.value/100)">
       </div>
+      <!-- Opacité Os -->
+      <div class="srow">
+        <label><span>Opacité os</span><span id="lbonop">90%</span></label>
+        <input type="range" min="5" max="100" value="90" oninput="lbonop.textContent=this.value+'%';setBoneOpacity(this.value/100)">
+      </div>
+      <!-- Opacité Vaisseaux -->
       <div class="srow">
         <label><span>Opacité vaisseaux</span><span id="lvop">70%</span></label>
         <input type="range" min="5" max="100" value="70" oninput="lvop.textContent=this.value+'%';setVesselsOpacity(this.value/100)">
       </div>
+      <!-- Couleur Corps -->
       <div class="srow">
-        <label><span>Couleur poumon</span></label>
-        <input type="color" id="lung-color" value="#2878cc" oninput="setLungColor(this.value)">
+        <label><span>Couleur corps</span></label>
+        <input type="color" id="body-color" value="#1a6fff" oninput="setBodyColor(this.value)">
       </div>
+      <!-- Couleur Poumons -->
+      <div class="srow">
+        <label><span>Couleur poumons</span></label>
+        <input type="color" id="lung-color" value="#ff69b4" oninput="setLungColor(this.value)">
+      </div>
+      <!-- Couleur Os -->
+      <div class="srow">
+        <label><span>Couleur os</span></label>
+        <input type="color" id="bone-color" value="#f0e6c8" oninput="setBoneColor(this.value)">
+      </div>
+
       <button class="btn-sm" onclick="resetCam()">↺ Réinitialiser la vue</button>
 
     </div>
@@ -257,7 +293,7 @@ input[type=color]{ width:100%; height:22px; cursor:pointer; border-radius:4px; b
   <!-- 3D pane -->
   <div id="pane-3d">
     <div id="welcome">
-      <div id="welcome-icon">🫁</div>
+      <div id="welcome-icon">🧍</div>
       <div id="welcome-sub">Chargez un dossier patient pour commencer</div>
     </div>
     <div id="vloader" class="gone">
@@ -344,12 +380,17 @@ const rim=new THREE.DirectionalLight(0x0033cc,0.7); rim.position.set(0,-200,-500
 scene.add(new THREE.DirectionalLight(0x112244,0.4)).position.set(0,-600,100);
 const nodLight=new THREE.PointLight(0xff4400,0,800); scene.add(nodLight);
 
-// Pivot imbriqué : tiltPivot (rotation X fixe) contient yPivot (rotation Y pure)
+// Pivot imbriqué
 const tiltPivot = new THREE.Group(); scene.add(tiltPivot);
 const group     = new THREE.Group(); tiltPivot.add(group);
-tiltPivot.rotation.x = 0.22; // inclinaison anatomique fixe
-let lungMesh=null, vesselsMesh=null, noduleMesh=null, noduleGroup=null;
-let autoRot=false, lungOpacity=0.22, vesselsOpacity=0.70, lungColorHex=0x2878cc;
+tiltPivot.rotation.x = 0.22;
+
+let bodyMesh=null, lungMesh=null, vesselsMesh=null, boneMesh=null, noduleMesh=null, noduleGroup=null;
+let autoRot=false;
+let lungOpacity=0.22, vesselsOpacity=0.70, bodyOpacity=0.12, boneOpacity=0.90;
+let lungColorHex=0xff69b4;   // rose par défaut
+let bodyColorHex=0x1a6fff;   // bleu par défaut
+let boneColorHex=0xf0e6c8;   // ivoire/crème par défaut
 
 // Controls
 let drag=false, rDrag=false, pX=0, pY=0;
@@ -376,24 +417,46 @@ renderer.domElement.addEventListener('touchmove',e=>{
 },{passive:true});
 renderer.domElement.addEventListener('touchend',()=>{drag=false;pinchDist=null;});
 
-// Shaders
+// ── SHADERS ──────────────────────────────────────────────────
+
+// Shader poumons (subsurface scattering Fresnel)
 const LV=`varying vec3 vN,vVD;void main(){vec4 wp=modelMatrix*vec4(position,1.);vN=normalize(normalMatrix*normal);vVD=normalize(cameraPosition-wp.xyz);gl_Position=projectionMatrix*viewMatrix*wp;}`;
 const LF=`uniform vec3 uColor;uniform float uOpacity;varying vec3 vN,vVD;void main(){vec3 n=normalize(vN),v=normalize(vVD);float f=pow(1.-max(dot(n,v),0.),2.4);float sss=pow(max(-dot(n,v)+.2,0.),2.)*.12;float a=clamp(f*uOpacity*3.8+sss,0.,uOpacity*2.2);vec3 c=mix(uColor,vec3(.55,.84,1.),f*.5);c+=vec3(.15,.03,.03)*sss;gl_FragColor=vec4(c,a);}`;
 function makeLungMat(op){return new THREE.ShaderMaterial({vertexShader:LV,fragmentShader:LF,uniforms:{uColor:{value:new THREE.Color(lungColorHex)},uOpacity:{value:op}},transparent:true,depthWrite:false,side:THREE.DoubleSide,blending:THREE.AdditiveBlending});}
+
+// Shader corps (silhouette bleue, très transparent)
+const BV=`varying vec3 vN,vVD;void main(){vec4 wp=modelMatrix*vec4(position,1.);vN=normalize(normalMatrix*normal);vVD=normalize(cameraPosition-wp.xyz);gl_Position=projectionMatrix*viewMatrix*wp;}`;
+const BF=`uniform vec3 uColor;uniform float uOpacity;varying vec3 vN,vVD;void main(){vec3 n=normalize(vN),v=normalize(vVD);float f=pow(1.-max(dot(n,v),0.),3.0);float a=clamp(f*uOpacity*4.5,0.,uOpacity*1.8);vec3 c=mix(uColor*0.6,uColor+vec3(.2,.35,.5),f*.7);gl_FragColor=vec4(c,a);}`;
+function makeBodyMat(op){return new THREE.ShaderMaterial({vertexShader:BV,fragmentShader:BF,uniforms:{uColor:{value:new THREE.Color(bodyColorHex)},uOpacity:{value:op}},transparent:true,depthWrite:false,side:THREE.FrontSide,blending:THREE.AdditiveBlending});}
+
+// Matériau os (ivoire solide avec brillance)
+function makeBoneMat(op) {
+  return new THREE.MeshPhongMaterial({
+    color: new THREE.Color(boneColorHex),
+    emissive: new THREE.Color(0.05, 0.045, 0.035),
+    specular: new THREE.Color(0.8, 0.8, 0.75),
+    shininess: 120,
+    transparent: op < 1.0,
+    opacity: op,
+    side: THREE.FrontSide,
+    depthWrite: true,        // important pour que les os masquent bien
+  });
+}
 
 // Render loop
 let clock=0;
 function animate(){
   requestAnimationFrame(animate);clock+=.016;
   if(autoRot&&!drag) rotY+=.003;
-  group.rotation.y     = rotY;      // rotation Y pure = axe cranio-caudal
-  tiltPivot.rotation.x = rotX;      // tilt anatomique (souris haut/bas)
+  group.rotation.y     = rotY;
+  tiltPivot.rotation.x = rotX;
   camera.position.set(panX,panY,camZ);camera.lookAt(panX,panY,0);
   if(nodLight.intensity>0)nodLight.intensity=3+1.5*Math.sin(clock*2.2);
   renderer.render(scene,camera);
 }
 animate();
 
+// ── GEOMETRIES ───────────────────────────────────────────────
 function buildGeo(data){
   const geo=new THREE.BufferGeometry();
   geo.setAttribute('position',new THREE.Float32BufferAttribute(data.positions,3));
@@ -420,34 +483,56 @@ function neonGrad(geo){
 
 function clearScene(){
   group.children.slice().forEach(m=>{group.remove(m);m.traverse(c=>{if(c.geometry)c.geometry.dispose();if(c.material)(Array.isArray(c.material)?c.material:[c.material]).forEach(mm=>mm.dispose());});});
-  lungMesh=vesselsMesh=noduleMesh=noduleGroup=null;nodLight.intensity=0;
+  bodyMesh=lungMesh=vesselsMesh=boneMesh=noduleMesh=noduleGroup=null;nodLight.intensity=0;
 }
 
 function loadMeshes(data){
   clearScene();
+
+  // ── Corps entier (bleu, renderOrder le plus bas = derrière tout)
+  if(data.body_mesh){
+    bodyMesh=new THREE.Mesh(buildGeo(data.body_mesh),makeBodyMat(bodyOpacity));
+    bodyMesh.renderOrder=1;
+    group.add(bodyMesh);
+  }
+
+  // ── Poumons (rose)
   if(data.lung_mesh){
     lungMesh=new THREE.Mesh(buildGeo(data.lung_mesh),makeLungMat(lungOpacity));
-    lungMesh.renderOrder=10;group.add(lungMesh);
+    lungMesh.renderOrder=10;
+    group.add(lungMesh);
   }
+
+  // ── Vaisseaux
   if(data.vessels_mesh){
     vesselsMesh=new THREE.Mesh(buildGeo(data.vessels_mesh),new THREE.MeshPhongMaterial({
       color:new THREE.Color(.82,.92,1.),emissive:new THREE.Color(.03,.07,.15),
       specular:new THREE.Color(1,1,1),shininess:180,transparent:true,opacity:vesselsOpacity,side:THREE.DoubleSide}));
     vesselsMesh.renderOrder=5;group.add(vesselsMesh);
   }
+
+  // ── Os (ivoire, entre corps et poumons)
+  if(data.bone_mesh){
+    boneMesh=new THREE.Mesh(buildGeo(data.bone_mesh),makeBoneMat(boneOpacity));
+    boneMesh.renderOrder=8;
+    group.add(boneMesh);
+  }
+
+  // ── Nodule
   if(data.nodule_mesh){
     const geo=buildGeo(data.nodule_mesh);neonGrad(geo);
     noduleMesh=new THREE.Mesh(geo,new THREE.MeshPhongMaterial({
       vertexColors:true,emissive:new THREE.Color(.18,.05,0),shininess:200,specular:new THREE.Color(1,.9,.3),side:THREE.FrontSide}));
-    // Halo unique léger — pas de scale excessif pour éviter les artefacts
     const h1=new THREE.Mesh(geo,new THREE.MeshBasicMaterial({color:0xff5500,side:THREE.BackSide,transparent:true,opacity:.35,depthWrite:false,blending:THREE.AdditiveBlending}));
     h1.scale.setScalar(1.10);
     noduleGroup=new THREE.Group();noduleGroup.add(h1,noduleMesh);
     noduleGroup.renderOrder=20;group.add(noduleGroup);nodLight.intensity=3;
   }
-  // Centrage sur le poumon uniquement (évite que les halos faussent le pivot)
-  const bboxRef = lungMesh
-    ? new THREE.Box3().setFromObject(lungMesh)
+
+  // Centrage : référence sur le corps s'il existe, sinon poumon
+  const refMesh = bodyMesh || lungMesh;
+  const bboxRef = refMesh
+    ? new THREE.Box3().setFromObject(refMesh)
     : new THREE.Box3().setFromObject(group);
   const sz=new THREE.Vector3();bboxRef.getSize(sz);
   const ctr=new THREE.Vector3();bboxRef.getCenter(ctr);
@@ -455,18 +540,27 @@ function loadMeshes(data){
   panX=0;panY=0;camZ=Math.max(sz.x,sz.y,sz.z)*1.75;rotX=0.18;rotY=0;
 }
 
-// UI
+// ── UI ───────────────────────────────────────────────────────
 window.tog=function(layer){
-  const ids={lung:'t-lung',vessels:'t-ves',nodule:'t-nod'};
+  const ids={body:'t-body',lung:'t-lung',bone:'t-bone',vessels:'t-ves',nodule:'t-nod'};
   const el=document.getElementById(ids[layer]);el.classList.toggle('on');const on=el.classList.contains('on');
+  if(layer==='body'&&bodyMesh)bodyMesh.visible=on;
   if(layer==='lung'&&lungMesh)lungMesh.visible=on;
+  if(layer==='bone'&&boneMesh)boneMesh.visible=on;
   if(layer==='vessels'&&vesselsMesh)vesselsMesh.visible=on;
   if(layer==='nodule'&&noduleGroup){noduleGroup.visible=on;nodLight.intensity=on?3:0;}
 };
 window.togRot=function(){autoRot=!autoRot;document.getElementById('t-rot').classList.toggle('on',autoRot);};
+
+window.setBodyOpacity=function(v){bodyOpacity=v;if(bodyMesh&&bodyMesh.material.uniforms)bodyMesh.material.uniforms.uOpacity.value=v;};
 window.setLungOpacity=function(v){lungOpacity=v;if(lungMesh&&lungMesh.material.uniforms)lungMesh.material.uniforms.uOpacity.value=v;};
+window.setBoneOpacity=function(v){boneOpacity=v;if(boneMesh){boneMesh.material.opacity=v;boneMesh.material.transparent=v<1.0;boneMesh.material.needsUpdate=true;}};
 window.setVesselsOpacity=function(v){vesselsOpacity=v;if(vesselsMesh)vesselsMesh.material.opacity=v;};
+
+window.setBodyColor=function(hex){const c=new THREE.Color(hex);bodyColorHex=c.getHex();if(bodyMesh&&bodyMesh.material.uniforms)bodyMesh.material.uniforms.uColor.value.set(c);};
 window.setLungColor=function(hex){const c=new THREE.Color(hex);lungColorHex=c.getHex();if(lungMesh&&lungMesh.material.uniforms)lungMesh.material.uniforms.uColor.value.set(c);};
+window.setBoneColor=function(hex){const c=new THREE.Color(hex);boneColorHex=c.getHex();if(boneMesh)boneMesh.material.color.set(c);};
+
 window.resetCam=function(){const bbox=new THREE.Box3().setFromObject(group);const sz=new THREE.Vector3();bbox.getSize(sz);panX=0;panY=0;rotX=0.18;rotY=0;camZ=Math.max(sz.x,sz.y,sz.z)*1.75;};
 
 // ═══════════════════════════════════════════════════
